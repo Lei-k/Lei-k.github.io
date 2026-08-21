@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'sha256-eh6YKe0WnEeSB1w+Td7PsIg56jRzucCXQiE1pxMneVI='; style-src 'sha256-zliS7ABtx5RphY2U+zn8cXH02S8TqHLiFfdlOCy955I='; img-src data:; connect-src 'none'; form-action 'none'; base-uri 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; media-src 'none'; font-src 'none'; manifest-src 'none'">
+<title>安全提供金鑰</title>
+<style>
+:root{color-scheme:dark;--bg:#07111f;--card:#0f1d31;--line:#243b59;--text:#edf5ff;--muted:#9fb2ca;--accent:#42d3b0;--danger:#ff8793}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at top,#15304b 0,#07111f 45%);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Noto Sans TC","PingFang TC",sans-serif;min-height:100vh;padding:18px}.card{max-width:560px;margin:0 auto;background:rgba(15,29,49,.97);border:1px solid var(--line);border-radius:20px;padding:22px;box-shadow:0 18px 55px rgba(0,0,0,.35)}h1{font-size:24px;margin:0 0 8px}.lead{color:var(--muted);font-size:14px;line-height:1.65;margin:0 0 20px}.badge{display:inline-flex;gap:7px;align-items:center;background:#103c38;color:#8ff2da;border:1px solid #24685d;border-radius:999px;padding:6px 10px;font-size:12px;margin-bottom:14px}.dot{width:8px;height:8px;background:var(--accent);border-radius:50%}label{display:block;font-size:13px;color:#c8d7e8;margin:14px 0 6px}input,select,textarea,button{width:100%;font:inherit}input,select,textarea{color:var(--text);background:#091629;border:1px solid #2a4362;border-radius:11px;padding:12px 13px;outline:none}input:focus,select:focus,textarea:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(66,211,176,.12)}textarea{min-height:116px;resize:vertical;word-break:break-all}.secret-row{display:grid;grid-template-columns:1fr auto;gap:8px}.secret-row button{width:auto;padding:0 13px;background:#172b45;color:#c8d7e8;border:1px solid #2a4362;border-radius:11px}.actions{display:grid;gap:10px;margin-top:18px}button.primary{border:0;border-radius:12px;padding:13px 16px;background:linear-gradient(135deg,#32cda8,#36aee8);color:#04211e;font-weight:750;cursor:pointer}button.secondary{border:1px solid #34516f;border-radius:12px;padding:11px 16px;background:#152740;color:#d9e8f7;cursor:pointer}.status{min-height:22px;font-size:13px;margin-top:12px;color:var(--muted)}.status.ok{color:#8ff2da}.status.error{color:var(--danger)}.fingerprint{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:11px;color:#7f98b5;word-break:break-all;margin-top:18px}.warning{font-size:12px;line-height:1.55;color:#b9cae0;border-left:3px solid #f4b860;padding-left:10px;margin-top:16px}.hidden{display:none}
+</style>
+</head>
+<body>
+<main class="card">
+  <div class="badge"><span class="dot"></span>裝置端加密 · 不上傳明文</div>
+  <h1>安全提供金鑰</h1>
+  <p class="lead">金鑰會在這台裝置上使用 Web Crypto 加密。此頁面不會把明文送往伺服器；Telegram 與頁面伺服器只會接觸密文。</p>
+
+  <label for="project">項目代號</label>
+  <input id="project" autocomplete="off" autocapitalize="none" placeholder="例如 atlas" pattern="[A-Za-z0-9._-]{1,64}" required>
+
+  <label for="environment">環境</label>
+  <select id="environment"><option value="dev">Development</option><option value="staging">Staging</option><option value="prod">Production</option><option value="sandbox">Sandbox</option></select>
+
+  <label for="secret-name">金鑰名稱</label>
+  <input id="secret-name" autocomplete="off" autocapitalize="characters" placeholder="例如 GITHUB_TOKEN" pattern="[A-Z][A-Z0-9_]{1,63}" required>
+
+  <label for="secret-value">金鑰值</label>
+  <div class="secret-row"><input id="secret-value" type="password" autocomplete="new-password" spellcheck="false" placeholder="只在此裝置記憶體中處理" required><button id="toggle" type="button">顯示</button></div>
+
+  <div class="actions">
+    <button class="primary" id="encrypt-button" type="button">加密</button>
+    <button class="secondary hidden" id="send-button" type="button">複製密文並返回 Telegram</button>
+    <button class="secondary hidden" id="copy-button" type="button">複製密文</button>
+  </div>
+
+  <label class="hidden" id="envelope-label" for="envelope">加密封包</label>
+  <textarea class="hidden" id="envelope" readonly></textarea>
+  <div id="status" class="status"></div>
+  <p class="warning">不要把未加密的金鑰貼到 Telegram。若頁面顯示的接收端指紋與我提供的不一致，請停止操作。</p>
+  <div class="fingerprint">接收端指紋：8d8c594adeacacd04ffc7bb3</div>
+</main>
+<script>
+'use strict';
+const KEY_ID='8d8c594adeacacd04ffc7bb3';
+const PUBLIC_KEY_B64='MIIBojANBgkqhkiG9w0BAQEFAAOCAY8AMIIBigKCAYEAijuIZrrgnN1a5L6DJ0JqXHH8H3NM7GfkFT0t7hn0WKN0I/+cRoK/zZ+mH6R1ejfuPfo9xcuSHb0p3jIkfNIYXTNeWgtdNbMLifyY4tHM7gJwkRTX5ps2Uv36am2hgl1kWxPQdRjQw70PglBimPEJwMzifBW/8ET7wOOdRNbWEB1CMmXHGfi+J2FZP0by5SnBGuqmjvlx7NHN8L609JcDkuIUyPNwbXoEI4naOmYA0sZfMLcfFK9wM7bpNvPq5z4riaq4F7P1Y3Kij31m9eLAkLqOlbXkyLJrMIdI+Y4IfSLQJTHyv/u49ewhxCutpXcWBXzmJh4stxT7p6EH5iii3vOHyAhbWbqQp62iEptVPAGOWPGuesB+Q9YhW7lpA42pKJilkd+6L4J36lIgOcnPMZOdjpWdDxhrSUx/rjb2U3x9YBZjdx0JvHnD+mop9jilhJ88xDwlBZhSk9XUYR8p5qMhJ+DEcjZtMKOUBHoji6sJDamBCMGpiozbWAxrT/PXAgMBAAE=';
+const PREFIX='HERMES-SECRET-ENVELOPE-V1:';
+const enc=new TextEncoder();
+const b64ToBytes=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
+const bytesToB64=b=>{let s='';const a=new Uint8Array(b);for(let i=0;i<a.length;i+=0x8000)s+=String.fromCharCode(...a.subarray(i,i+0x8000));return btoa(s)};
+const bytesToB64Url=b=>bytesToB64(b).replace(/\+/g,'-').replace(/\//g,'_').replace(/=+$/,'');
+const status=(text,kind='')=>{const el=document.querySelector('#status');el.textContent=text;el.className='status '+kind};
+let inputVersion=0;
+function clearEnvelope(clearStatus=true){
+  inputVersion+=1;
+  document.querySelector('#envelope').value='';
+  document.querySelector('#envelope').classList.add('hidden');
+  document.querySelector('#envelope-label').classList.add('hidden');
+  document.querySelector('#copy-button').classList.add('hidden');
+  document.querySelector('#send-button').classList.add('hidden');
+  if(clearStatus)status('');
+}
+function validate(){
+  const project=document.querySelector('#project').value.trim();
+  const environment=document.querySelector('#environment').value;
+  const name=document.querySelector('#secret-name').value.trim();
+  const value=document.querySelector('#secret-value').value;
+  if(!/^[A-Za-z0-9._-]{1,64}$/.test(project))throw new Error('項目代號格式不正確');
+  if(!['dev','staging','prod','sandbox'].includes(environment))throw new Error('環境不正確');
+  if(!/^[A-Z][A-Z0-9_]{1,63}$/.test(name))throw new Error('金鑰名稱須使用大寫英數字與底線');
+  if(!value||value.length>1024)throw new Error('金鑰值不可為空，且不得超過 1,024 字元');
+  return {project,environment,name,value,created_at:new Date().toISOString()};
+}
+async function encrypt(){
+  clearEnvelope(false);
+  const encryptionVersion=inputVersion;
+  status('加密中…');
+  const payload=validate();
+  const publicKey=await crypto.subtle.importKey('spki',b64ToBytes(PUBLIC_KEY_B64),{name:'RSA-OAEP',hash:'SHA-256'},false,['encrypt']);
+  const aesKey=await crypto.subtle.generateKey({name:'AES-GCM',length:256},true,['encrypt']);
+  const rawKey=await crypto.subtle.exportKey('raw',aesKey);
+  const iv=crypto.getRandomValues(new Uint8Array(12));
+  const aad=enc.encode('hermes-secure-vault:v1:'+KEY_ID);
+  const ciphertext=await crypto.subtle.encrypt({name:'AES-GCM',iv,additionalData:aad,tagLength:128},aesKey,enc.encode(JSON.stringify(payload)));
+  const wrappedKey=await crypto.subtle.encrypt({name:'RSA-OAEP'},publicKey,rawKey);
+  const envelope={version:1,algorithm:'RSA-OAEP-256+A256GCM',key_id:KEY_ID,wrapped_key:bytesToB64(wrappedKey),iv:bytesToB64(iv),ciphertext:bytesToB64(ciphertext)};
+  const transport=PREFIX+bytesToB64Url(enc.encode(JSON.stringify(envelope)));
+  if(encryptionVersion!==inputVersion)throw new Error('加密期間欄位已變更，結果已作廢，請重新輸入並加密');
+  document.querySelector('#secret-value').value='';
+  if(enc.encode(transport).length>4096)throw new Error('加密封包超過 Telegram 的 4,096 位元組限制，請縮短金鑰值');
+  document.querySelector('#envelope').value=transport;
+  document.querySelector('#envelope').classList.remove('hidden');
+  document.querySelector('#envelope-label').classList.remove('hidden');
+  document.querySelector('#copy-button').classList.remove('hidden');
+  document.querySelector('#send-button').classList.remove('hidden');
+  status('加密完成；明文欄位已清除。','ok');
+  return transport;
+}
+async function copyCurrentEnvelope(){
+  const field=document.querySelector('#envelope');
+  const value=field.value;
+  if(!value)throw new Error('沒有可複製的有效密文，請重新加密');
+  const copyVersion=inputVersion;
+  await navigator.clipboard.writeText(value);
+  if(copyVersion!==inputVersion||field.value!==value){
+    try{await navigator.clipboard.writeText('')}catch(_ignored){}
+    throw new Error('複製期間欄位已變更，舊密文已作廢，請重新加密');
+  }
+  return value;
+}
+async function copyEnvelope(){if(!document.querySelector('#envelope').value)await encrypt();await copyCurrentEnvelope();status('密文已複製，可貼回 Telegram。','ok')}
+function closeTelegram(){
+  const params={return_back:true};
+  if(window.TelegramWebviewProxy&&typeof window.TelegramWebviewProxy.postEvent==='function'){window.TelegramWebviewProxy.postEvent('web_app_close',JSON.stringify(params));return true}
+  if(window.external&&typeof window.external.notify==='function'){window.external.notify(JSON.stringify({eventType:'web_app_close',eventData:params}));return true}
+  return false;
+}
+document.querySelector('#encrypt-button').addEventListener('click',()=>encrypt().catch(e=>status(e.message,'error')));
+document.querySelector('#copy-button').addEventListener('click',()=>copyEnvelope().catch(e=>status('複製失敗：'+e.message,'error')));
+document.querySelector('#send-button').addEventListener('click',async()=>{try{if(!document.querySelector('#envelope').value)await encrypt();await copyCurrentEnvelope();if(!closeTelegram())status('密文已複製，請返回 Telegram 貼上。','ok')}catch(e){status('複製失敗：'+e.message,'error')}});
+['project','secret-name','secret-value'].forEach(id=>document.querySelector('#'+id).addEventListener('input',()=>clearEnvelope()));
+document.querySelector('#environment').addEventListener('change',()=>clearEnvelope());
+document.querySelector('#toggle').addEventListener('click',()=>{const f=document.querySelector('#secret-value');f.type=f.type==='password'?'text':'password';document.querySelector('#toggle').textContent=f.type==='password'?'顯示':'隱藏'});
+</script>
+</body>
+</html>
